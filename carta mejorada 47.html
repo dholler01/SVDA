@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carta de San Valentín</title>
+<style>
+  /* Estilos CSS */
+  body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: white; /* Fondo blanco */
+    transition: background-color 1s; /* Transición de color de fondo */
+  }
+  .container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    color: black; /* Color de texto negro */
+    transition: color 1s; /* Transición de color de texto */
+  }
+  .card {
+    display: none; /* Ocultar la carta inicialmente */
+    padding: 20px;
+    border-radius: 10px;
+    background-color: pink; /* Fondo rosa */
+    cursor: pointer;
+    transition: all 1s; /* Transición de todos los atributos */
+    max-width: 90%; /* Tamaño máximo de la carta */
+    max-height: 90%; /* Tamaño máximo de la carta */
+    overflow: auto; /* Habilitar desplazamiento si la carta es muy grande */
+  }
+  .card.open {
+    display: flex; /* Mostrar la carta al hacer clic */
+    position: fixed;
+    top: 50%; /* Centrar verticalmente */
+    left: 50%; /* Centrar horizontalmente */
+    transform: translate(-50%, -50%); /* Centrar horizontal y verticalmente */
+    width: 80%; /* Ancho de la carta */
+    height: 80%; /* Altura de la carta */
+    justify-content: center;
+    align-items: center;
+    background-color: pink; /* Fondo rosa */
+    z-index: 9999; /* Asegura que la carta esté por encima de todo */
+  }
+  .card.open p {
+    text-align: center; /* Centrar el texto */
+    color: black; /* Color de texto negro */
+  }
+</style>
+</head>
+<body>
+  <!-- Contenido de la carta -->
+  <div class="container">
+    <h1>¡Feliz Día de San Valentín!</h1>
+    <p>Te amo mucho y espero que tengamos muchos momentos especiales juntos. Sos lo mejor que me pasó, mi abejita hermosa.</p>
+    <button onclick="document.querySelector('.card').classList.toggle('open'); this.style.display = 'none';">Abrir carta</button>
+    <div class="card">
+      <div class="card-content">
+        <p>Gracias por ser el amor de mi vida, mi bebé, mi todo mi amor. Por vos soy el más feliz y voy a ser siempre el más feliz. Te amo, te amo, te amo y siempre te voy a amar. Hoy, que es nuestro primer 14 de febrero juntos en la relación, quiero decirte que gracias a vos soy y voy a ser cada vez mejor, en la relación y en todo aspecto, mi amor. Siempre vas a ser el amor de mi vida y la niña que hace que mi corazón palpite mucho, mi amor, no tenes idea de cuanto espero a verte mi amor, juntos vamos a salvaaar al mundo de la tristeza y desamor y todos al ver cuanto nos amamos van a amarse y va a haber paz mundial JAKDJAKSJ te amo miemeeer.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
