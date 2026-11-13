@@ -10,7 +10,7 @@ function title(s, t, sub){
   s.addText(t,{x:0.5,y:0.3,w:9,h:0.7,fontFace:HF,fontSize:32,bold:true,color:BERRY,margin:0,isTextBox:true});
   if(sub) s.addText(sub,{x:0.5,y:0.98,w:9,h:0.35,fontFace:BF,fontSize:14,color:GREY,margin:0,isTextBox:true});
 }
-function foot(s,n){ s.addText('NUBA Bolivia · Dirección Estratégica 1',{x:0.5,y:5.25,w:6,h:0.25,fontFace:BF,fontSize:10,color:GREY,margin:0,isTextBox:true});
+let _n=1;function foot(s,n0){const n=++_n; s.addText('NUBA Bolivia · Dirección Estratégica 1',{x:0.5,y:5.25,w:6,h:0.25,fontFace:BF,fontSize:10,color:GREY,margin:0,isTextBox:true});
   s.addText(String(n),{x:9,y:5.25,w:0.5,h:0.25,fontFace:BF,fontSize:10,color:GREY,align:'right',margin:0,isTextBox:true}); }
 const hdr=(t)=>({text:t,options:{bold:true,color:WHITE,fill:{color:BERRY},fontFace:BF,fontSize:12}});
 const cell=(t,o={})=>({text:t,options:Object.assign({fontFace:BF,fontSize:12,color:INK},o)});
@@ -42,8 +42,8 @@ s.addText('VISIÓN ACTUAL',{x:5.45,y:1.7,w:3.8,h:0.3,fontFace:BF,fontSize:13,bol
 s.addText('«La cadena de belleza especializada más grande de Bolivia» y «la primera cadena de tiendas para la mujer de Bolivia».',{x:5.45,y:2.05,w:3.8,h:2.6,fontFace:BF,fontSize:15,italic:true,color:INK,margin:0,valign:'top',isTextBox:true});
 foot(s,3);
 
-// 4 Preguntas
-s=pres.addSlide(); title(s,'Respondemos las preguntas de análisis');
+// 4 Qué falta
+s=pres.addSlide(); title(s,'Paso 1: qué le falta a la misión y visión','Usamos las preguntas de análisis para encontrar las carencias');
 const q=[['¿Quiénes somos?','Cadena especializada de belleza más grande del país','El lenguaje «girls» acota la identidad'],
 ['¿Qué hacemos?','Productos originales de 50+ marcas, con testers','No destaca el K-Beauty, su mayor diferencial'],
 ['¿Para quién?','Las bolivianas','No define segmentos ni menciona a los hombres'],
@@ -51,20 +51,42 @@ const q=[['¿Quiénes somos?','Cadena especializada de belleza más grande del p
 ['¿Por qué existimos?','Había un vacío entre la perfumería formal y lo informal','No está formalizado'],
 ['¿Adónde queremos llegar?','Crecer a más ciudades','No hay año ni meta medible']];
 s.addTable([[hdr('Pregunta'),hdr('Lo que ya dice NUBA'),hdr('Lo que falta')]].concat(q.map((r,i)=>[cell(r[0],{bold:true,fill:{color:i%2?WHITE:BLUSH}}),cell(r[1],{fill:{color:i%2?WHITE:BLUSH}}),cell(r[2],{fill:{color:i%2?WHITE:BLUSH}})])),
- {x:0.5,y:1.2,w:9,colW:[2.4,3.3,3.3],rowH:0.55,border:{type:'none'},valign:'middle',margin:[0.04,0.1,0.04,0.1]});
+ {x:0.5,y:1.5,w:9,colW:[2.4,3.3,3.3],rowH:0.52,border:{type:'none'},valign:'middle',margin:[0.04,0.1,0.04,0.1]});
 foot(s,4);
 
-// 5 Mejoradas
-s=pres.addSlide(); s.background={color:BERRY};
-s.addText('Misión y visión mejoradas',{x:0.5,y:0.3,w:9,h:0.7,fontFace:HF,fontSize:32,bold:true,color:WHITE,margin:0,isTextBox:true});
-s.addShape(pres.ShapeType.roundRect,{x:0.5,y:1.2,w:4.3,h:3.3,rectRadius:0.12,fill:{color:WHITE},line:{color:WHITE},objectName:'Tarjeta mision mejorada'});
-s.addText('MISIÓN',{x:0.75,y:1.32,w:3.8,h:0.3,fontFace:BF,fontSize:13,bold:true,color:ROSE,margin:0,isTextBox:true});
-s.addText('Hacer que la belleza sea accesible, auténtica y cercana para las bolivianas y los bolivianos, con productos originales de más de 50 marcas, asesoría experta y una experiencia donde se puede tocar, probar y descubrir, con los mismos precios en todo el país.',{x:0.75,y:1.65,w:3.8,h:2.75,fontFace:BF,fontSize:14,color:INK,margin:0,valign:'top',isTextBox:true});
-s.addShape(pres.ShapeType.roundRect,{x:5.2,y:1.2,w:4.3,h:3.3,rectRadius:0.12,fill:{color:WHITE},line:{color:WHITE},objectName:'Tarjeta vision mejorada'});
-s.addText('VISIÓN 2030',{x:5.45,y:1.32,w:3.8,h:0.3,fontFace:BF,fontSize:13,bold:true,color:ROSE,margin:0,isTextBox:true});
-s.addText('Ser en 2030 la cadena de belleza de referencia de Bolivia y la comunidad de skincare y maquillaje favorita de las nuevas generaciones: líder en K-Beauty, presente en las principales ciudades y en internet, con una marca propia reconocida.',{x:5.45,y:1.65,w:3.8,h:2.75,fontFace:BF,fontSize:14,color:INK,margin:0,valign:'top',isTextBox:true});
-s.addText('Valores: autenticidad · cercanía · inclusión · curaduría · innovación · responsabilidad',{x:0.5,y:4.7,w:9,h:0.4,fontFace:BF,fontSize:14,color:'F3D9E0',margin:0,isTextBox:true});
-s.addNotes('Mejora: dice a quién sirve, con qué producto y servicio, en qué se diferencia, hasta dónde llega y para cuándo (2030).');
+// 5 y 6: de la actual a la mejorada
+function mejora(num,t,sub,actual,mejor,cambios){
+ s=pres.addSlide(); title(s,t,sub);
+ s.addShape(pres.ShapeType.roundRect,{x:0.5,y:1.45,w:4.1,h:1.75,rectRadius:0.1,fill:{color:BLUSH},line:{color:BLUSH},objectName:'Actual '+num});
+ s.addText('ACTUAL',{x:0.7,y:1.52,w:3.7,h:0.25,fontFace:BF,fontSize:12,bold:true,color:ROSE,margin:0,isTextBox:true});
+ s.addText(actual,{x:0.7,y:1.8,w:3.7,h:1.35,fontFace:BF,fontSize:12,italic:true,color:INK,margin:0,valign:'top',isTextBox:true});
+ s.addText('→',{x:4.62,y:2.0,w:0.76,h:0.5,fontFace:BF,fontSize:30,bold:true,color:BERRY,align:'center',margin:0,isTextBox:true});
+ s.addShape(pres.ShapeType.roundRect,{x:5.4,y:1.45,w:4.1,h:1.75,rectRadius:0.1,fill:{color:BERRY},line:{color:BERRY},objectName:'Mejorada '+num});
+ s.addText('MEJORADA',{x:5.6,y:1.52,w:3.7,h:0.25,fontFace:BF,fontSize:12,bold:true,color:'F3D9E0',margin:0,isTextBox:true});
+ s.addText(mejor,{x:5.6,y:1.8,w:3.7,h:1.35,fontFace:BF,fontSize:12,color:WHITE,margin:0,valign:'top',isTextBox:true});
+ s.addTable([[hdr('Lo que faltaba'),hdr('Lo que cambiamos')]].concat(cambios.map((r,i)=>[cell(r[0],{fill:{color:i%2?WHITE:BLUSH}}),cell(r[1],{bold:true,fill:{color:i%2?WHITE:BLUSH}})])),
+  {x:0.5,y:3.4,w:9,colW:[4.2,4.8],rowH:0.36,border:{type:'none'},valign:'middle',margin:[0.03,0.1,0.03,0.1]});
+ foot(s,num);}
+mejora(5,'Paso 2: de la misión actual a la mejorada','Cada cambio responde a una carencia',
+ '«Las bolivianas merecen acceso a los mismos productos internacionales que el resto del mundo: originales, garantizados, y con alguien que sepa explicarte por qué uno funciona mejor que otro para tu tipo de piel».',
+ 'Hacer que la belleza sea accesible, auténtica y cercana para las bolivianas y los bolivianos, con productos originales de más de 50 marcas, asesoría experta y una experiencia donde se puede tocar, probar y descubrir, con los mismos precios en todo el país.',
+ [['No define segmentos ni menciona a los hombres','«las bolivianas y los bolivianos»'],['Diferenciación dispersa en varios textos','Originales, asesoría, tocar y probar, mismos precios'],['Razón de existir no formalizada','Belleza «accesible, auténtica y cercana»']]);
+mejora(6,'Paso 3: de la visión actual a la mejorada','Valores: autenticidad · cercanía · inclusión · curaduría · innovación · responsabilidad',
+ '«La cadena de belleza especializada más grande de Bolivia» y «la primera cadena de tiendas para la mujer de Bolivia».',
+ 'Ser en 2030 la cadena de belleza de referencia de Bolivia y la comunidad de skincare y maquillaje favorita de las nuevas generaciones: líder en K-Beauty, presente en las principales ciudades y en internet, con una marca propia reconocida.',
+ [['No hay año ni meta medible','«en 2030» y metas que medimos en el Capítulo 4'],['No destaca el K-Beauty','«líder en K-Beauty»'],['Solo habla de crecer a más ciudades','Ciudades, internet y marca propia (Nu)']]);
+
+// 7 Preguntas contestadas
+s=pres.addSlide(); title(s,'Paso 4: contestamos las preguntas','Con la misión y visión mejoradas');
+const r=[['¿Quiénes somos?','La cadena de belleza de referencia de Bolivia y su comunidad de skincare y maquillaje'],
+['¿Qué hacemos?','Vendemos productos originales de 50+ marcas, con asesoría experta y K-Beauty'],
+['¿Para quién?','Las bolivianas y los bolivianos, sobre todo las nuevas generaciones'],
+['¿En qué nos diferenciamos?','Originalidad, asesoría, tocar y probar, mismos precios y marca propia'],
+['¿Por qué existimos?','Para que la belleza sea accesible, auténtica y cercana, entre lo formal y lo informal'],
+['¿Adónde queremos llegar?','A ser en 2030 la referencia del país, en las principales ciudades y en internet']];
+s.addTable([[hdr('Pregunta'),hdr('Respuesta')]].concat(r.map((x,i)=>[cell(x[0],{bold:true,fill:{color:i%2?WHITE:BLUSH}}),cell(x[1],{fill:{color:i%2?WHITE:BLUSH}})])),
+ {x:0.5,y:1.5,w:9,colW:[2.8,6.2],rowH:0.52,border:{type:'none'},valign:'middle',margin:[0.04,0.1,0.04,0.1]});
+foot(s,7);
 
 // 6 Matriz de poder
 s=pres.addSlide(); title(s,'Grupos de interés: matriz de poder','Poder vs. interés de 1 a 10 (valoración del grupo)');
