@@ -63,7 +63,7 @@ svg{width:100%;height:100%;display:block;user-select:none;-webkit-user-select:no
 <script>
 'use strict';
 /* ===== Mundo (unidades de mapa 1000 x 1400) ===== */
-const W=1000,H=1400;
+const W=1000;let H=1400;let hasImg=false;
 /* Geografía esquemática de Leonida (inspirada en lo conocido públicamente de los tráilers).
    Es un mapa ORIGINAL de referencia, no el arte oficial de Rockstar. */
 const LAND="M120,120 L420,70 L700,90 L860,160 L880,300 L840,460 L860,640 L820,820 L760,960 L700,1040 L600,1080 L520,1000 L470,880 L400,800 L300,760 L200,640 L150,480 L110,320 Z";
@@ -109,6 +109,9 @@ const save=()=>store.set('mk',markers);
 const world=mk('g',{},svg);
 const bg=mk('g',{},world);
 const imgLayer=mk('image',{x:0,y:0,width:W,height:H,preserveAspectRatio:'none',opacity:1},world);
+function setImage(src){
+  if(!src){imgLayer.removeAttribute('href');hasImg=false;H=1400;imgLayer.setAttribute('height',H);bg.style.display='';zoneG.style.display='';resize();home();redraw();return}
+  const im=new Image();im.onload=()=>{H=Math.round(W*im.naturalHeight/im.naturalWidth);imgLayer.setAttribute('height',H);imgLayer.setAttribute('href',src);hasImg=true;bg.style.display='none';zoneG.style.display='none';resize();home();redraw()};im.src=src}
 const defs=mk('defs',{},svg);
 const pat=mk('pattern',{id:'grid',width:50,height:50,patternUnits:'userSpaceOnUse'},defs);
 mk('path',{d:'M50 0H0V50',fill:'none',stroke:'#ffffff10','stroke-width':1},pat);
@@ -165,7 +168,7 @@ function render(){raf=0;clampView();
   /* etiquetas de zona: se desvanecen al acercar mucho */
   const zo=rel>6?0:rel>3?.5:1;
   ZONES.forEach(z=>{const t=zoneLbl[z.id];
-    const vis=(filter==='all'||filter===z.id)&&zo>0;
+    const vis=!hasImg&&(filter==='all'||filter===z.id)&&zo>0;
     t.style.display=vis?'':'none';
     t.setAttribute('x',view.x+z.cx*view.s);t.setAttribute('y',view.y+z.cy*view.s);
     t.setAttribute('font-size',Math.max(11,Math.min(22,13+rel*2)));t.setAttribute('opacity',zo);
@@ -218,7 +221,8 @@ mapEl.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.clientX,e.clientY
 function chips(){const c=$('#chips');c.replaceChildren();
   const add=(id,n)=>{const b=document.createElement('button');b.className='chip'+(filter===id?' on':'');b.textContent=n;
     b.onclick=()=>{filter=id;chips();id==='all'?home():flyTo(ZONES.find(z=>z.id===id).bb);redraw()};c.appendChild(b)};
-  add('all','Todo');ZONES.forEach(z=>add(z.id,z.n));}
+  add('all','Todo');ZONES.forEach(z=>add(z.id,z.n));
+  const u=document.createElement('button');u.className='chip';u.textContent='Cargar mi mapa';u.onclick=()=>$('#file').click();c.appendChild(u);}
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2200)}
 const sheet=$('#sheet');
 function closeSheet(){sheet.classList.remove('open')}
@@ -263,13 +267,13 @@ $('#btnMenu').onclick=()=>{
   sheet.classList.add('open');
   sheet.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{const k=b.dataset.k;cats.has(k)?cats.delete(k):cats.add(k);$('#btnMenu').click();redraw()});
   $('#m_img').onclick=()=>$('#file').click();
-  $('#m_rm').onclick=()=>{imgLayer.removeAttribute('href');idbSet(null);toast('Imagen quitada')};
+  $('#m_rm').onclick=()=>{setImage(null);idbSet(null);toast('Imagen quitada')};
   $('#m_exp').onclick=()=>{const b=new Blob([JSON.stringify(markers,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='marcadores-leonida.json';a.click()};
   $('#m_rst').onclick=()=>{if(confirm('¿Restablecer marcadores de ejemplo?')){markers=SEED.map(m=>({...m}));save();closeSheet();redraw()}};
   $('#m_cl').onclick=closeSheet;
 };
 $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
-  r.onload=()=>{imgLayer.setAttribute('href',r.result);idbSet(r.result);toast('Imagen cargada. Ajusta los marcadores si hace falta.');closeSheet()};r.readAsDataURL(f)};
+  r.onload=()=>{setImage(r.result);idbSet(r.result);toast('Mapa cargado. Mueve los marcadores a su lugar.');closeSheet()};r.readAsDataURL(f)};
 
 /* IndexedDB mínima para guardar la imagen propia en el teléfono */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('leonida',1);r.onupgradeneeded=()=>r.result.createObjectStore('k');r.onsuccess=()=>res(r.result);r.onerror=rej})}
@@ -279,7 +283,7 @@ async function idbGet(){try{const d=await idb();return await new Promise(r=>{con
 /* ===== Init ===== */
 addEventListener('resize',()=>{resize();redraw()});
 resize();view.s=fit;view.x=(vw-W*fit)/2;view.y=(vh-H*fit)/2;chips();render();
-idbGet().then(v=>{if(v)imgLayer.setAttribute('href',v)});
+idbGet().then(v=>{if(v)setImage(v)});
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
