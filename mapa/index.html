@@ -24,15 +24,18 @@ svg{width:100%;height:100%;display:block;user-select:none;-webkit-user-select:no
 .btn:active{background:var(--acc)}
 .search{position:fixed;left:10px;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:6;display:flex;gap:8px;width:calc(100% - 80px)}
 .search input{flex:1;min-width:0;height:46px;border-radius:14px;border:1px solid var(--line);background:#102233ee;color:var(--ink);padding:0 14px;font-size:16px}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--panel);border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);transform:translateY(105%);transition:transform .22s}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--panel);border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);transform:translateY(105%);transition:transform .22s;max-height:80%;overflow:auto}
 .sheet.open{transform:none}
-.sheet h3{margin:0 0 10px;font-size:17px}
+.sheet h3{margin:0 0 4px;font-size:17px}
+.sheet .sub{font-size:12px;color:var(--mute);margin-bottom:6px}
 .sheet label{display:block;font-size:12px;color:var(--mute);margin:10px 0 4px}
 .sheet input,.sheet select,.sheet textarea{width:100%;border-radius:10px;border:1px solid var(--line);background:#0b1620;color:var(--ink);padding:11px;font-size:16px}
+.sheet p{font-size:13px;color:var(--mute);margin:6px 0}
 .row{display:flex;gap:8px;margin-top:14px}
 .row button{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:#16293a;color:var(--ink);font-size:15px;font-weight:600}
 .row .pri{background:var(--acc);border-color:var(--acc)}
 .row .dan{color:#ff8a8a}
+.cats{display:flex;flex-wrap:wrap;gap:8px}
 .toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:10px;font-size:13px;z-index:20;opacity:0;transition:.2s;pointer-events:none;max-width:90%;text-align:center}
 .toast.on{opacity:1}
 .zone-label{font-weight:800;letter-spacing:.12em;text-transform:uppercase;fill:#fff;paint-order:stroke;stroke:#000a;stroke-linejoin:round;pointer-events:none}
@@ -43,11 +46,9 @@ svg{width:100%;height:100%;display:block;user-select:none;-webkit-user-select:no
 </head>
 <body>
 <div id="map"><svg id="svg"></svg></div>
-
 <div class="top"><div class="chips" id="chips"></div></div>
-
 <div class="search">
-  <input id="q" type="search" placeholder="Buscar (ej. N1N)…" autocomplete="off">
+  <input id="q" type="search" placeholder="Buscar (ej. N1N, aeropuerto)…" autocomplete="off">
   <button class="btn" id="btnMenu" aria-label="Menú">⋯</button>
 </div>
 <div class="fab">
@@ -55,232 +56,300 @@ svg{width:100%;height:100%;display:block;user-select:none;-webkit-user-select:no
   <button class="btn" id="zout" aria-label="Alejar">−</button>
   <button class="btn" id="home" aria-label="Ver todo">⌂</button>
 </div>
-
 <div class="sheet" id="sheet"></div>
 <div class="toast" id="toast"></div>
 <input type="file" id="file" accept="image/*" hidden>
 
 <script>
 'use strict';
-/* ===== Mundo (unidades de mapa 1000 x 1400) ===== */
-const W=1000;let H=1400;let hasImg=false;
-/* Geografía esquemática de Leonida (inspirada en lo conocido públicamente de los tráilers).
-   Es un mapa ORIGINAL de referencia, no el arte oficial de Rockstar. */
-const LAND="M120,120 L420,70 L700,90 L860,160 L880,300 L840,460 L860,640 L820,820 L760,960 L700,1040 L600,1080 L520,1000 L470,880 L400,800 L300,760 L200,640 L150,480 L110,320 Z";
-const KEYS=[[560,1120,38,16,-20],[500,1165,30,12,-30],[430,1210,34,13,-35],[360,1250,28,11,-30],[300,1290,36,13,-40],[245,1330,26,10,-30]];
+/* ===== Sistema de coordenadas =====
+   Los datos usan metros aproximados (x este+, y norte+) con el sistema de la comunidad de mapeo
+   (centro 0,0). Se normalizan a 0..1 para que los marcadores sigan al mapa aunque cargues tu imagen. */
+const BX=[-8500,4000], BY=[-7800,8500];
+const nu=x=>(x-BX[0])/(BX[1]-BX[0]), nv=y=>(BY[1]-y)/(BY[1]-BY[0]);
+const W=1000; const H0=Math.round(W*(BY[1]-BY[0])/(BX[1]-BX[0]));
+let H=H0, hasImg=false;
+
+/* Geografía esquemática ORIGINAL (no es el arte de Rockstar). Polígonos en metros. */
+const LANDm=[[-8200,7500],[-2000,8300],[2800,8000],[3200,5500],[3000,3500],[2400,2800],[2300,800],[2000,-400],[1500,-1800],[800,-3000],[-500,-4500],[-1500,-4600],[-3500,-4200],[-5000,-3000],[-6500,-2600],[-8200,-2000],[-8400,500],[-8000,2500],[-8300,5000]];
+const KEYSm=[[600,-4900,520,230,-25],[-300,-5350,430,200,-30],[-1250,-5450,520,210,-20],[-2300,-6000,420,190,-30],[-3300,-6600,430,200,-35],[-4000,-7100,380,170,-30],[-1900,-5750,300,120,-25]];
+const LAKEm=[-3200,3400,1500,1000];
 const ZONES=[
- {id:'kalaga',n:'Kalaga Park',c:'#4f7a4a',p:[120,120,420,70,560,90,560,250,380,260,110,320]},
- {id:'ambrosia',n:'Ambrosia',c:'#b58a3c',p:[560,90,700,90,860,160,880,300,720,340,560,250]},
- {id:'grass',n:'Grassrivers',c:'#3f8f7a',p:[110,320,380,260,560,250,600,420,480,560,300,640,200,640,150,480]},
- {id:'vice',n:'Vice City',c:'#d6458f',p:[600,420,720,340,880,300,840,460,860,640,820,820,700,860,520,720,480,560]},
- {id:'port',n:'Port Gellhorn',c:'#7a6fb5',p:[200,640,300,640,480,560,520,720,400,800,300,760]},
- {id:'keys',n:'Leonida Keys',c:'#2fb4c9',p:[520,720,700,860,760,960,700,1040,600,1080,520,1000,470,880,400,800]}
+ {id:'kalaga',n:'Mount Kalaga',c:'#4f7a4a',p:[[-8200,7500],[-2000,8300],[2800,8000],[3200,5500],[-1000,5300],[-5500,5500],[-8300,5000]]},
+ {id:'ambrosia',n:'Ambrosia',c:'#b58a3c',p:[[-8300,5000],[-5500,5500],[-1000,5300],[500,3800],[-1800,2200],[-5000,1600],[-6000,3000],[-8400,2800]]},
+ {id:'vice',n:'Vice City',c:'#d6458f',p:[[-1800,2200],[500,3800],[3000,3500],[2400,2800],[2300,800],[2000,-400],[-800,-300],[-2000,900]]},
+ {id:'port',n:'Port Gellhorn',c:'#7a6fb5',p:[[-8400,2800],[-6000,3000],[-5000,1600],[-5400,-2200],[-8200,-2000],[-8400,500]]},
+ {id:'grass',n:'Grassrivers',c:'#3f8f7a',p:[[-5000,1600],[-1800,2200],[-2000,900],[-800,-300],[2000,-400],[1500,-1800],[800,-3000],[-1000,-3400],[-3500,-3200],[-5400,-2200]]},
+ {id:'keys',n:'Leonida Keys',c:'#2fb4c9',p:[[1500,-3500],[1200,-5200],[-1500,-6500],[-4500,-7500],[-5000,-6500],[-3500,-4300],[-5000,-3000],[-3500,-3200],[-1000,-3400],[800,-3000]]}
 ];
 const CATS={
- loc:{n:'Lugar',c:'#ff4fa3'},
- mis:{n:'Misión',c:'#f0b429'},
- shop:{n:'Tienda',c:'#38bdf8'},
- hide:{n:'Escondite',c:'#34d399'},
- note:{n:'Nota',c:'#a78bfa'}
+ T:{n:'Zonas y pueblos',c:'#ff4fa3'}, S:{n:'Safehouses',c:'#f0b429'}, H:{n:'Hoteles',c:'#e879f9'},
+ A:{n:'Aeropuertos',c:'#60a5fa'}, M:{n:'Puertos y marinas',c:'#22d3ee'}, R:{n:'Transporte',c:'#a3e635'},
+ F:{n:'Comida y bares',c:'#fb923c'}, B:{n:'Tiendas',c:'#38bdf8'}, G:{n:'Gobierno y policía',c:'#94a3b8'},
+ L:{n:'Monumentos',c:'#f472b6'}, D:{n:'Deportes y ocio',c:'#4ade80'}, N:{n:'Naturaleza',c:'#34d399'},
+ P:{n:'Puentes y carreteras',c:'#facc15'}, I:{n:'Industria',c:'#a78bfa'}, U:{n:'Mis marcadores',c:'#ff4fa3'}
 };
-/* Marcadores de ejemplo: AJUSTA posiciones/nombres (mantén pulsado en el mapa para crear, toca uno para editar). */
-const SEED=[
- {id:'s1',t:'N1N',name:'N1N',x:760,y:470,z:'vice',cat:'loc',note:'Punto de ejemplo: muévelo a donde corresponda.'},
- {id:'s2',t:'VB',name:'Vice Beach',x:810,y:560,z:'vice',cat:'loc',note:''},
- {id:'s3',t:'PG',name:'Puerto Gellhorn',x:330,y:690,z:'port',cat:'loc',note:''},
- {id:'s4',t:'GR',name:'Pantano',x:340,y:430,z:'grass',cat:'hide',note:''},
- {id:'s5',t:'KP',name:'Kalaga Park',x:260,y:200,z:'kalaga',cat:'loc',note:''},
- {id:'s6',t:'AM',name:'Ambrosia',x:740,y:210,z:'ambrosia',cat:'loc',note:''},
- {id:'s7',t:'KY',name:'Key principal',x:560,y:1120,z:'keys',cat:'loc',note:''}
+/* [nombre, categoría, x, y, importancia 1-3, confianza 'a' referencia comunidad / 'e' estimada, zona, texto corto, nota] */
+const D=[
+ ['Vice City','T',-150,1450,1,'a','vice','VC','Centro urbano principal, costa este.'],
+ ['Vice Beach','T',1750,1800,1,'e','vice','VB','Isla barrera con Ocean Beach y Washington Beach.'],
+ ['Ocean Beach','T',1920,650,2,'a','vice','OB','Calles art déco con neón y hoteles frente al mar.'],
+ ['Washington Beach','T',1958,1591,2,'a','vice','WB','Hoteles frente a la playa.'],
+ ['Little Cuba','T',-1300,1250,2,'e','vice','LC',''],
+ ['Rialto Islands','T',900,2350,2,'e','vice','RI','Islas estilo venecianas en la bahía.'],
+ ['Starfish Island','T',1250,1050,3,'e','vice','SI',''],
+ ['Dalton Island','T',1500,2000,3,'e','vice','DI',''],
+ ['Catalan Key','T',1650,-250,2,'e','vice','CK','Isla con faro.'],
+ ['Gloriana Key','T',2100,250,3,'e','vice','GK','Pequeña isla.'],
+ ['Port Vice City','M',650,1450,2,'e','vice','PV','Terminal de contenedores.'],
+ ['Aeropuerto Internacional de Vice City','A',-1500,800,1,'e','vice','VCI','Aeropuerto principal, con estación de metro y tren.'],
+ ['NINE1NINE (N1N)','F',-300,1550,1,'e','vice','N1N','Club nocturno en Downtown, Vice City.'],
+ ['The Vault','F',-200,1500,3,'e','vice','VT','Club en Downtown.'],
+ ['Effluvia','F',1900,700,3,'e','vice','EF','Ocean Beach.'],
+ ['Conch King','F',-700,1900,3,'e','vice','CKg','La Perle.'],
+ ['Y Vice City','S',1900,1560,2,'a','vice','Y','Hotel y posible safehouse en Washington Beach.'],
+ ['Lucia\'s Apartment','S',-1000,1700,2,'e','vice','LA','Crosstown, Vice City.'],
+ ['Vice Regal Hotel','H',1409,2803,2,'a','vice','VR','Torre de lujo frente al mar al norte de Vice Beach.'],
+ ['Akio Hotel','H',-250,1750,3,'e','vice','AK','Tequesta Retreat.'],
+ ['Clarissa Hotel','H',-100,1250,3,'e','vice','CH','Downtown.'],
+ ['Sahara Arena','D',150,1650,2,'e','vice','SA','Catalan Blvd.'],
+ ['Fleeca Field','D',-900,1900,2,'e','vice','FF','Estadio en Rockridge.'],
+ ['Galina Ballet Opera House','L',350,1850,3,'e','vice','GB','Catalan Blvd.'],
+ ['Palaestra Tower','L',-50,1600,3,'e','vice','PT','Torre en Bayside.'],
+ ['Heath Tower','L',-250,1350,3,'e','vice','HT','Torre en Downtown.'],
+ ['Vice City Sign','L',-1450,900,3,'e','vice','VS',''],
+ ['San Leandro Lighthouse','L',1700,-450,3,'e','vice','SL','Faro en Catalan Key.'],
+ ['Estación Metro Downtown','R',-200,1400,3,'e','vice','M',''],
+ ['Túnel de Port Vice City','P',500,1550,3,'e','vice','TU',''],
+ ['Rivo Bridge','P',900,2150,3,'e','vice','RB',''],
+ ['Vice Beach Police Dept.','G',1900,950,3,'e','vice','PD','Ocean Beach.'],
+ ['Catalan Bay','N',1100,300,3,'e','vice','CB',''],
+ ['Waning Sands','T',-800,-500,2,'e','vice','WS',''],
+ ['Evergreen Mall','B',-950,-250,2,'e','vice','EM','Centro comercial en Waning Sands.'],
+ ['Leaf Links Golf Club','D',200,-900,3,'e','vice','GC','Condado de Vice-Dale.'],
+ ['Vice-Dale County','T',700,-700,2,'e','vice','VD','Condado al sureste.'],
+ ['Hamlet','T',-700,-1500,2,'e','grass','HA',''],
+ ['Prisión de Hamlet','G',-1100,-1900,3,'e','grass','PR',''],
+ ['Peregrine Bay','T',800,-1100,3,'e','grass','PB',''],
+ ['Fuzzard Power Station','I',900,-1300,3,'e','grass','PS','Central eléctrica.'],
+ ['Grassrivers','T',-3200,-1500,1,'e','grass','GR','Humedales tipo Everglades.'],
+ ['Pelican Valley','T',-4200,-500,3,'e','grass','PV',''],
+ ['Canales de aerodeslizador','N',-2800,-2000,3,'e','grass','AB','Canales, pantanos y campamentos sobre pilotes.'],
+ ['Mariana County','T',-2500,-3300,2,'e','grass','MC','Condado al sur.'],
+ ['Goliath','I',-2600,-3000,3,'e','grass','GO',''],
+ ['Leonida Keys','T',-900,-5600,1,'a','keys','LK','Archipiélago conectado por puentes.'],
+ ['Key Lento','T',-1200,-5300,2,'e','keys','KL',''],
+ ['Watson Bay','T',-300,-4300,2,'e','keys','WB',''],
+ ['Aeropuerto de Watson Bay','A',-250,-4450,3,'e','keys','WA',''],
+ ['Maroon Key','T',-2300,-6000,3,'e','keys','MK','Zona del dirigible.'],
+ ['Abismo Key','T',-3300,-6600,3,'e','keys','AK',''],
+ ['Goose Key','T',-4000,-7100,3,'e','keys','GK','Arrecifes.'],
+ ['Jason\'s House','S',-1250,-5350,2,'e','keys','JH','Safehouse en Key Lento.'],
+ ['The Rusty Anchor','F',-1100,-5500,3,'e','keys','RA','Bar en Key Lento.'],
+ ['Brian\'s Boat Works & Marina','M',-1300,-5200,3,'e','keys','BM',''],
+ ['Overseas Highway','P',-1800,-5800,3,'e','keys','OH','Autopista con puentes sobre el mar.'],
+ ['Port Gellhorn','T',-6200,-900,1,'a','port','PG','Ciudad portuaria de la costa del golfo.'],
+ ['Estación de tren de Port Gellhorn','R',-6100,-700,3,'e','port','TR',''],
+ ['Bocamar Bridge','P',-6700,300,2,'e','port','BB',''],
+ ['Bocamar Bay','N',-7200,100,3,'e','port','BY',''],
+ ['Gellhorn International Raceway','D',-5700,-1600,2,'e','port','GR','Circuito.'],
+ ['Lucky Plucker','F',-6300,-1000,3,'e','port','LP',''],
+ ['Ambrosia','T',-2400,1900,1,'e','ambrosia','AM','Zona agrícola e industrial junto al lago.'],
+ ['Ambrosia Mill','I',-2500,2000,3,'e','ambrosia','AM','Ingenio de azúcar.'],
+ ['Policía de Ambrosia','G',-2300,1800,3,'e','ambrosia','PD',''],
+ ['Lake Leonida','N',-3200,3400,1,'e','ambrosia','LL','Gran lago interior.'],
+ ['Belville','T',-4200,2600,3,'e','ambrosia','BV',''],
+ ['Bluegrass','T',-4700,2000,3,'e','ambrosia','BG',''],
+ ['Buckskin','T',-1500,3600,3,'e','ambrosia','BK',''],
+ ['Millport','T',-5200,3000,3,'e','ambrosia','MP',''],
+ ['Emerald Springs','N',-1800,4400,3,'e','ambrosia','ES',''],
+ ['Kelly County','T',-7000,4500,2,'e','ambrosia','KC','Condado al oeste.'],
+ ['Starlet Motel','S',-7100,4700,2,'e','ambrosia','SM','Safehouse en la Ruta Histórica 628.'],
+ ['Cañón de Kelly','N',-6800,5800,3,'e','kalaga','CN',''],
+ ['Mount Kalaga','N',-3000,7000,1,'e','kalaga','MK','Parque nacional, bosques y cañones.'],
+ ['Lummox County','T',-1000,6500,2,'e','kalaga','LU','Condado al norte.'],
+ ['Leonard County','T',1500,5000,2,'e','kalaga','LE','Condado al noreste.'],
+ ['Breakwater Quarry','I',-1500,7300,3,'e','kalaga','BQ','Cantera, norte de Leonida.'],
+ ['Océano Atlántico','N',3400,0,3,'e','vice','OA',''],
+ ['Golfo de Leonida','N',-7800,-4800,3,'e','port','GL','']
 ];
+const SEED=D.map((d,i)=>({id:'s'+i,name:d[0],cat:d[1],u:nu(d[2]),v:nv(d[3]),imp:d[4],conf:d[5],z:d[6],t:d[7],note:d[8]}));
 
-/* ===== Estado ===== */
+/* ===== Estado (se guardan solo tus cambios) ===== */
 const $=s=>document.querySelector(s);
-const svg=$('#svg'), mapEl=$('#map');
-const NS='http://www.w3.org/2000/svg';
+const svg=$('#svg'), mapEl=$('#map'), NS='http://www.w3.org/2000/svg';
 const mk=(t,a={},p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e};
-let view={x:0,y:0,s:1}, fit=1, vw=0, vh=0;
-let markers=[], filter='all', cats=new Set(Object.keys(CATS));
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-markers=store.get('mk',null)||SEED.map(m=>({...m}));
-const save=()=>store.set('mk',markers);
+let st=store.get('st2',null)||{user:[],ov:{}};
+const save=()=>store.set('st2',st);
+let markers=[];
+function build(){markers=[];
+  for(const s of SEED){const o=st.ov[s.id]||{};if(o.del)continue;markers.push({...s,...o})}
+  for(const u of st.user)markers.push({...u,cat:u.cat||'U',imp:1,conf:'u'});}
+build();
+let view={x:0,y:0,s:1}, fit=1, vw=0, vh=0, filter='all', cats=new Set(Object.keys(CATS));
 
 /* ===== Escena ===== */
-const world=mk('g',{},svg);
-const bg=mk('g',{},world);
-const imgLayer=mk('image',{x:0,y:0,width:W,height:H,preserveAspectRatio:'none',opacity:1},world);
-function setImage(src){
-  if(!src){imgLayer.removeAttribute('href');hasImg=false;H=1400;imgLayer.setAttribute('height',H);bg.style.display='';zoneG.style.display='';resize();home();redraw();return}
-  const im=new Image();im.onload=()=>{H=Math.round(W*im.naturalHeight/im.naturalWidth);imgLayer.setAttribute('height',H);imgLayer.setAttribute('href',src);hasImg=true;bg.style.display='none';zoneG.style.display='none';resize();home();redraw()};im.src=src}
+const world=mk('g',{},svg), bg=mk('g',{},world);
+const imgLayer=mk('image',{x:0,y:0,width:W,height:H,preserveAspectRatio:'none'},world);
 const defs=mk('defs',{},svg);
+const px=(x,y)=>[nu(x)*W,nv(y)*H0];
+const pts=a=>a.map(p=>px(p[0],p[1]).join(',')).join(' ');
 const pat=mk('pattern',{id:'grid',width:50,height:50,patternUnits:'userSpaceOnUse'},defs);
 mk('path',{d:'M50 0H0V50',fill:'none',stroke:'#ffffff10','stroke-width':1},pat);
-mk('rect',{x:-2000,y:-2000,width:5000,height:5400,fill:'#0e2a3d'},bg);
-mk('rect',{x:-2000,y:-2000,width:5000,height:5400,fill:'url(#grid)'},bg);
+mk('rect',{x:-3000,y:-3000,width:7000,height:7000,fill:'#0e2a3d'},bg);
+mk('rect',{x:-3000,y:-3000,width:7000,height:7000,fill:'url(#grid)'},bg);
 const landG=mk('g',{},bg);
-mk('path',{d:LAND,fill:'#26443a',stroke:'#7fb5a0','stroke-width':3,'stroke-linejoin':'round'},landG);
-KEYS.forEach(k=>mk('ellipse',{cx:k[0],cy:k[1],rx:k[2],ry:k[3],transform:`rotate(${k[4]} ${k[0]} ${k[1]})`,fill:'#26443a',stroke:'#7fb5a0','stroke-width':3},landG));
-const zoneG=mk('g',{},world);
-const zoneEls={};
+const mpu=(BX[1]-BX[0])/W;  /* metros por unidad de mundo */
+const isl=k=>{const [x,y]=px(k[0],k[1]);return {cx:x,cy:y,rx:k[2]/mpu,ry:k[3]/mpu,transform:`rotate(${-k[4]} ${x} ${y})`}};
+mk('polygon',{points:pts(LANDm),fill:'#26443a',stroke:'#7fb5a0','stroke-width':3,'stroke-linejoin':'round'},landG);
+KEYSm.forEach(k=>mk('ellipse',{...isl(k),fill:'#26443a',stroke:'#7fb5a0','stroke-width':3},landG));
+const lk=px(LAKEm[0],LAKEm[1]);
+mk('ellipse',{cx:lk[0],cy:lk[1],rx:LAKEm[2]/mpu,ry:LAKEm[3]/mpu,fill:'#0e2a3d',stroke:'#7fb5a0','stroke-width':2},landG);
+const clip=mk('clipPath',{id:'landclip'},defs);
+mk('polygon',{points:pts(LANDm)},clip);KEYSm.forEach(k=>mk('ellipse',isl(k),clip));
+const zoneG=mk('g',{'clip-path':'url(#landclip)'},world);
+const zoneEls={},zoneLbl={};
+const lblG=mk('g',{},svg), mkG=mk('g',{},svg);
 ZONES.forEach(z=>{
-  const pts=[];for(let i=0;i<z.p.length;i+=2)pts.push(z.p[i]+','+z.p[i+1]);
-  const clip=mk('clipPath',{id:'c_'+z.id},defs);mk('path',{d:LAND},clip);
-  const g=mk('g',{'clip-path':z.id==='keys'?'':'url(#c_'+z.id+')'},zoneG);
-  const poly=mk('polygon',{points:pts.join(' '),fill:z.c,'fill-opacity':.35,stroke:z.c,'stroke-width':2.5,'stroke-linejoin':'round'},g);
-  zoneEls[z.id]=poly;
-  z.cx=0;z.cy=0;for(let i=0;i<z.p.length;i+=2){z.cx+=z.p[i];z.cy+=z.p[i+1]}z.cx/=z.p.length/2;z.cy/=z.p.length/2;
-  const xs=z.p.filter((_,i)=>i%2==0),ys=z.p.filter((_,i)=>i%2==1);
-  z.bb=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
+  zoneEls[z.id]=mk('polygon',{points:pts(z.p),fill:z.c,'fill-opacity':.33,stroke:z.c,'stroke-width':2.5,'stroke-linejoin':'round'},zoneG);
+  const w=z.p.map(p=>px(p[0],p[1]));z.cx=w.reduce((a,b)=>a+b[0],0)/w.length;z.cy=w.reduce((a,b)=>a+b[1],0)/w.length;
+  z.bb=[Math.min(...w.map(p=>p[0])),Math.min(...w.map(p=>p[1])),Math.max(...w.map(p=>p[0])),Math.max(...w.map(p=>p[1]))];
+  zoneLbl[z.id]=mk('text',{class:'zone-label','text-anchor':'middle'},lblG);zoneLbl[z.id].textContent=z.n;
 });
-const lblG=mk('g',{},svg);       /* etiquetas de zona (tamaño fijo en pantalla) */
-const mkG=mk('g',{},svg);        /* marcadores (se encogen al hacer zoom) */
-const zoneLbl={};
-ZONES.forEach(z=>{zoneLbl[z.id]=mk('text',{class:'zone-label','text-anchor':'middle'},lblG);zoneLbl[z.id].textContent=z.n});
+const wx=m=>m.u*W, wy=m=>m.v*H;
 
 /* ===== Vista ===== */
-function resize(){vw=mapEl.clientWidth;vh=mapEl.clientHeight;fit=Math.min(vw/W,vh/H)*0.96;}
-function clampView(){
-  const minS=fit*0.8,maxS=fit*24;view.s=Math.max(minS,Math.min(maxS,view.s));
-  const m=60*view.s;
-  view.x=Math.min(m,Math.max(vw-W*view.s-m,view.x));
-  view.y=Math.min(m,Math.max(vh-H*view.s-m,view.y));
-}
+function resize(){vw=mapEl.clientWidth;vh=mapEl.clientHeight;fit=Math.min(vw/W,vh/H)*0.96}
+function clampView(){view.s=Math.max(fit*.8,Math.min(fit*24,view.s));const m=60*view.s;
+  view.x=Math.min(m,Math.max(vw-W*view.s-m,view.x));view.y=Math.min(m,Math.max(vh-H*view.s-m,view.y))}
 let raf=0;
 function render(){raf=0;clampView();
   world.setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.s})`);
   const rel=view.s/fit;
-  /* Tamaño del redondito: grande al estar alejado, se achica al acercar (como en el juego) */
+  /* el redondito se achica al acercar, como en el juego */
   const d=Math.max(18,Math.min(44,46/Math.pow(rel,0.62)));
   mkG.replaceChildren();
   const q=($('#q').value||'').trim().toLowerCase();
+  const maxImp=rel>4?3:rel>1.8?2:1;
   for(const m of markers){
     if(!cats.has(m.cat))continue;
-    if(filter!=='all'&&m.z!==filter)continue;
-    const sx=view.x+m.x*view.s, sy=view.y+m.y*view.s;
+    const hit=q&&(m.name.toLowerCase().includes(q)||(m.t||'').toLowerCase().includes(q)||(CATS[m.cat]||{n:''}).n.toLowerCase().includes(q));
+    if(!hit&&m.imp>maxImp)continue;
+    if(filter!=='all'&&m.z!==filter&&!hit)continue;
+    const sx=view.x+wx(m)*view.s, sy=view.y+wy(m)*view.s;
     if(sx<-60||sy<-60||sx>vw+60||sy>vh+60)continue;
-    const hit=q&&(m.name.toLowerCase().includes(q)||m.t.toLowerCase().includes(q));
-    const g=mk('g',{class:'mk',transform:`translate(${sx} ${sy})`},mkG);
-    g.dataset.id=m.id;
-    mk('circle',{r:d/2+(hit?5:0),fill:CATS[m.cat].c,stroke:hit?'#fff':'#fff','stroke-width':Math.max(1.5,d*0.07)+(hit?2:0)},g);
-    if(d>=17){const t=mk('text',{y:d*0.12,'font-size':Math.min(d*0.36,d*1.5/Math.max(m.t.length,2.2))},g);t.textContent=m.t}
+    const g=mk('g',{class:'mk',transform:`translate(${sx} ${sy})`,opacity:m.found?.55:1},mkG);g.dataset.id=m.id;
+    mk('circle',{r:d/2+(hit?5:0),fill:(CATS[m.cat]||CATS.U).c,stroke:'#fff','stroke-width':Math.max(1.5,d*0.07)+(hit?2:0),'stroke-dasharray':m.conf==='e'?'4 3':''},g);
+    const tx=m.found?'✓':(m.t||m.name.slice(0,3)).toUpperCase();
+    if(d>=17){const t=mk('text',{y:d*0.12,'font-size':Math.min(d*0.36,d*1.5/Math.max(tx.length,2.2))},g);t.textContent=tx}
     if(rel>2.2||hit){const n=mk('text',{class:'nm',x:d/2+5,y:4,'font-size':12},g);n.textContent=m.name}
   }
-  /* etiquetas de zona: se desvanecen al acercar mucho */
   const zo=rel>6?0:rel>3?.5:1;
-  ZONES.forEach(z=>{const t=zoneLbl[z.id];
-    const vis=!hasImg&&(filter==='all'||filter===z.id)&&zo>0;
-    t.style.display=vis?'':'none';
-    t.setAttribute('x',view.x+z.cx*view.s);t.setAttribute('y',view.y+z.cy*view.s);
-    t.setAttribute('font-size',Math.max(11,Math.min(22,13+rel*2)));t.setAttribute('opacity',zo);
-    t.setAttribute('stroke-width',3);
-    zoneEls[z.id].setAttribute('fill-opacity',filter==='all'?.35:(filter===z.id?.28:.08));
-  });
+  ZONES.forEach(z=>{const t=zoneLbl[z.id];const vis=!hasImg&&(filter==='all'||filter===z.id)&&zo>0;
+    t.style.display=vis?'':'none';t.setAttribute('x',view.x+z.cx*view.s);t.setAttribute('y',view.y+z.cy*view.s);
+    t.setAttribute('font-size',Math.max(11,Math.min(22,13+rel*2)));t.setAttribute('opacity',zo);t.setAttribute('stroke-width',3);
+    zoneEls[z.id].setAttribute('fill-opacity',filter==='all'?.33:(filter===z.id?.28:.08))});
 }
 const redraw=()=>{raf||(raf=requestAnimationFrame(render))};
-function zoomAt(px,py,f){const ns=Math.max(fit*.8,Math.min(fit*24,view.s*f));f=ns/view.s;
-  view.x=px-(px-view.x)*f;view.y=py-(py-view.y)*f;view.s=ns;redraw()}
-function flyTo(bb,pad=0.12){
-  const bw=bb[2]-bb[0],bh=bb[3]-bb[1];
-  const s=Math.min(vw/(bw*(1+pad*2)),vh/(bh*(1+pad*2)));
-  const t={x:vw/2-((bb[0]+bb[2])/2)*s,y:vh/2-((bb[1]+bb[3])/2)*s,s};anim(t)}
-function anim(t){const a={...view},t0=performance.now();
-  (function f(n){const p=Math.min(1,(n-t0)/380),e=1-Math.pow(1-p,3);
-    view.s=a.s+(t.s-a.s)*e;view.x=a.x+(t.x-a.x)*e;view.y=a.y+(t.y-a.y)*e;render();
-    if(p<1)requestAnimationFrame(f)})(t0)}
+function zoomAt(px_,py_,f){const ns=Math.max(fit*.8,Math.min(fit*24,view.s*f));f=ns/view.s;view.x=px_-(px_-view.x)*f;view.y=py_-(py_-view.y)*f;view.s=ns;redraw()}
+function flyTo(bb,pad=0.12){const bw=bb[2]-bb[0],bh=bb[3]-bb[1];const s=Math.min(vw/(bw*(1+pad*2)),vh/(bh*(1+pad*2)));anim({x:vw/2-((bb[0]+bb[2])/2)*s,y:vh/2-((bb[1]+bb[3])/2)*s,s})}
+function anim(t){const a={...view},t0=performance.now();(function f(n){const p=Math.min(1,(n-t0)/380),e=1-Math.pow(1-p,3);
+  view.s=a.s+(t.s-a.s)*e;view.x=a.x+(t.x-a.x)*e;view.y=a.y+(t.y-a.y)*e;render();if(p<1)requestAnimationFrame(f)})(t0)}
 const home=()=>flyTo([0,0,W,H],0);
 
-/* ===== Gestos (arrastrar, pellizcar, doble toque, mantener para crear) ===== */
-const ptrs=new Map();let last=null,lp=null,moved=false,lpT=0,lastTap=0;
-mapEl.addEventListener('pointerdown',e=>{
-  mapEl.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=false;
-  if(ptrs.size===1){last={x:e.clientX,y:e.clientY};clearTimeout(lpT);
-    const mg=e.target.closest&&e.target.closest('.mk');
-    if(!mg)lpT=setTimeout(()=>{if(!moved&&ptrs.size===1){navigator.vibrate&&navigator.vibrate(20);newMarker(e.clientX,e.clientY)}},650);
-  }else{clearTimeout(lpT);lp=pinfo()}
-});
+/* ===== Gestos ===== */
+const ptrs=new Map();let last=null,lp=null,moved=false,lpT=0,lastTap=0,moving=null;
 const pinfo=()=>{const a=[...ptrs.values()];return{d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),cx:(a[0].x+a[1].x)/2,cy:(a[0].y+a[1].y)/2}};
-mapEl.addEventListener('pointermove',e=>{
-  if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(ptrs.size===1&&last){const dx=e.clientX-last.x,dy=e.clientY-last.y;
-    if(Math.abs(dx)+Math.abs(dy)>3)moved=true;if(moved)clearTimeout(lpT);
+mapEl.addEventListener('pointerdown',e=>{mapEl.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=false;
+  if(ptrs.size===1){last={x:e.clientX,y:e.clientY};clearTimeout(lpT);
+    if(!(e.target.closest&&e.target.closest('.mk')))lpT=setTimeout(()=>{if(!moved&&ptrs.size===1){navigator.vibrate&&navigator.vibrate(20);newMarker(e.clientX,e.clientY)}},650)}
+  else{clearTimeout(lpT);lp=pinfo()}});
+mapEl.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1&&last){const dx=e.clientX-last.x,dy=e.clientY-last.y;if(Math.abs(dx)+Math.abs(dy)>3)moved=true;if(moved)clearTimeout(lpT);
     view.x+=dx;view.y+=dy;last={x:e.clientX,y:e.clientY};redraw()}
-  else if(ptrs.size===2&&lp){moved=true;const n=pinfo();
-    view.x+=n.cx-lp.cx;view.y+=n.cy-lp.cy;zoomAt(n.cx,n.cy,n.d/lp.d);lp=n}
-});
-const up=e=>{clearTimeout(lpT);
-  const wasTap=!moved&&ptrs.size===1;ptrs.delete(e.pointerId);
-  if(ptrs.size===1){const r=[...ptrs.values()][0];last={...r};lp=null}else last=null;
+  else if(ptrs.size===2&&lp){moved=true;const n=pinfo();view.x+=n.cx-lp.cx;view.y+=n.cy-lp.cy;zoomAt(n.cx,n.cy,n.d/lp.d);lp=n}});
+const up=e=>{clearTimeout(lpT);const wasTap=!moved&&ptrs.size===1;ptrs.delete(e.pointerId);
+  if(ptrs.size===1){last={...[...ptrs.values()][0]};lp=null}else last=null;
   if(wasTap){const mg=e.target.closest&&e.target.closest('.mk');
-    if(mg){openMarker(mg.dataset.id)}
-    else{const now=Date.now();if(now-lastTap<300)zoomAt(e.clientX,e.clientY,2.2);lastTap=now;closeSheet()}}
-};
+    if(moving){placeMoving(e.clientX,e.clientY)}
+    else if(mg)openMarker(mg.dataset.id);
+    else{const now=Date.now();if(now-lastTap<300)zoomAt(e.clientX,e.clientY,2.2);lastTap=now;closeSheet()}}};
 mapEl.addEventListener('pointerup',up);mapEl.addEventListener('pointercancel',up);
 mapEl.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*0.0018))},{passive:false});
 
 /* ===== UI ===== */
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function chips(){const c=$('#chips');c.replaceChildren();
   const add=(id,n)=>{const b=document.createElement('button');b.className='chip'+(filter===id?' on':'');b.textContent=n;
     b.onclick=()=>{filter=id;chips();id==='all'?home():flyTo(ZONES.find(z=>z.id===id).bb);redraw()};c.appendChild(b)};
   add('all','Todo');ZONES.forEach(z=>add(z.id,z.n));
-  const u=document.createElement('button');u.className='chip';u.textContent='Cargar mi mapa';u.onclick=()=>$('#file').click();c.appendChild(u);}
-function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2200)}
+  const u=document.createElement('button');u.className='chip';u.textContent='Cargar mi mapa';u.onclick=()=>$('#file').click();c.appendChild(u)}
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2400)}
 const sheet=$('#sheet');
-function closeSheet(){sheet.classList.remove('open')}
-function zoneAt(x,y){let best=null,bd=1e9;for(const z of ZONES){const d=(z.cx-x)**2+(z.cy-y)**2;if(d<bd){bd=d;best=z.id}}return best}
-function editor(m,isNew){
-  sheet.innerHTML=`<h3>${isNew?'Nuevo marcador':'Marcador'}</h3>
-  <label>Nombre</label><input id="f_n" value="${esc(m.name)}">
-  <label>Texto del redondito (máx. 4)</label><input id="f_t" maxlength="4" value="${esc(m.t)}">
-  <label>Categoría</label><select id="f_c">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${k===m.cat?'selected':''}>${v.n}</option>`).join('')}</select>
-  <label>Notas</label><textarea id="f_o" rows="2">${esc(m.note||'')}</textarea>
-  <div class="row"><button class="pri" id="b_ok">Guardar</button>${isNew?'<button id="b_x">Cancelar</button>':'<button id="b_mv">Mover</button><button class="dan" id="b_del">Borrar</button>'}</div>`;
+const closeSheet=()=>sheet.classList.remove('open');
+function zoneAt(x,y){let b=null,bd=1e9;for(const z of ZONES){const d=(z.cx-x)**2+(z.cy-y)**2;if(d<bd){bd=d;b=z.id}}return b}
+function persist(m,patch){Object.assign(m,patch);
+  if(m.id.startsWith('s')){st.ov[m.id]={...(st.ov[m.id]||{}),...patch}}
+  else{const i=st.user.findIndex(k=>k.id===m.id);if(i>=0)st.user[i]={...st.user[i],...patch}}
+  save()}
+function openMarker(id){const m=markers.find(k=>k.id===id);if(!m)return;
+  const isSeed=m.id.startsWith('s');
+  const conf=m.conf==='a'?'Posición de referencia de la comunidad (aprox.)':m.conf==='e'?'Posición estimada: ajústala con Mover si hace falta':'Marcador tuyo';
+  sheet.innerHTML=`<h3>${esc(m.name)}</h3><div class="sub">${(CATS[m.cat]||CATS.U).n} · ${conf}</div>
+  ${m.note?`<p>${esc(m.note)}</p>`:''}
+  <div class="row"><button class="pri" id="b_f">${m.found?'Quitar encontrado':'Marcar encontrado'}</button><button id="b_mv">Mover</button></div>
+  ${isSeed?'':`<label>Nombre</label><input id="f_n" value="${esc(m.name)}"><label>Notas</label><textarea id="f_o" rows="2">${esc(m.note||'')}</textarea>`}
+  <div class="row">${isSeed?'':'<button id="b_ok">Guardar</button>'}<button class="dan" id="b_del">Borrar</button><button id="b_c">Cerrar</button></div>`;
   sheet.classList.add('open');
-  $('#b_ok').onclick=()=>{m.name=$('#f_n').value.trim()||'Sin nombre';m.t=($('#f_t').value.trim()||m.name.slice(0,3)).toUpperCase();m.cat=$('#f_c').value;m.note=$('#f_o').value;
-    if(isNew)markers.push(m);save();closeSheet();redraw()};
-  if(isNew)$('#b_x').onclick=closeSheet;
-  else{$('#b_del').onclick=()=>{markers=markers.filter(k=>k!==m);save();closeSheet();redraw()};
-    $('#b_mv').onclick=()=>{closeSheet();toast('Toca el mapa para colocarlo');moving=m}}
-}
-let moving=null;
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  $('#b_f').onclick=()=>{persist(m,{found:!m.found});closeSheet();redraw()};
+  $('#b_mv').onclick=()=>{closeSheet();moving=m;toast('Toca el mapa para colocarlo')};
+  $('#b_c').onclick=closeSheet;
+  $('#b_del').onclick=()=>{if(isSeed){st.ov[m.id]={...(st.ov[m.id]||{}),del:true}}else st.user=st.user.filter(k=>k.id!==m.id);save();build();closeSheet();redraw()};
+  if(!isSeed)$('#b_ok').onclick=()=>{persist(m,{name:$('#f_n').value.trim()||'Sin nombre',note:$('#f_o').value});closeSheet();redraw()}}
+function placeMoving(cx,cy){const r=mapEl.getBoundingClientRect();
+  const x=(cx-r.left-view.x)/view.s,y=(cy-r.top-view.y)/view.s;persist(moving,{u:x/W,v:y/H,z:zoneAt(x,y*H0/H)});moving=null;redraw();toast('Movido')}
 function newMarker(cx,cy){const r=mapEl.getBoundingClientRect();const x=(cx-r.left-view.x)/view.s,y=(cy-r.top-view.y)/view.s;
-  editor({id:'u'+Date.now(),t:'',name:'',x,y,z:zoneAt(x,y),cat:'loc',note:''},true)}
-function openMarker(id){const m=markers.find(k=>k.id===id);if(m)editor(m,false)}
-mapEl.addEventListener('click',e=>{ if(!moving)return;const r=mapEl.getBoundingClientRect();
-  moving.x=(e.clientX-r.left-view.x)/view.s;moving.y=(e.clientY-r.top-view.y)/view.s;moving.z=zoneAt(moving.x,moving.y);moving=null;save();redraw();toast('Movido')});
+  sheet.innerHTML=`<h3>Nuevo marcador</h3><label>Nombre</label><input id="f_n"><label>Texto del redondito (máx. 4)</label><input id="f_t" maxlength="4">
+  <label>Categoría</label><select id="f_c">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${k==='U'?'selected':''}>${v.n}</option>`).join('')}</select>
+  <label>Notas</label><textarea id="f_o" rows="2"></textarea><div class="row"><button class="pri" id="b_ok">Guardar</button><button id="b_x">Cancelar</button></div>`;
+  sheet.classList.add('open');$('#b_x').onclick=closeSheet;
+  $('#b_ok').onclick=()=>{const n=$('#f_n').value.trim()||'Sin nombre';st.user.push({id:'u'+Date.now(),name:n,t:($('#f_t').value.trim()||n.slice(0,3)).toUpperCase(),cat:$('#f_c').value,u:x/W,v:y/H,z:zoneAt(x,y*H0/H),note:$('#f_o').value});save();build();closeSheet();redraw()}}
 
 $('#zin').onclick=()=>zoomAt(vw/2,vh/2,1.8);
 $('#zout').onclick=()=>zoomAt(vw/2,vh/2,1/1.8);
 $('#home').onclick=()=>{filter='all';chips();home();redraw()};
-$('#q').addEventListener('input',()=>{
-  const q=$('#q').value.trim().toLowerCase();redraw();if(!q)return;
-  const m=markers.find(k=>k.name.toLowerCase().includes(q)||k.t.toLowerCase().includes(q));
-  if(m){const s=fit*8;anim({s,x:vw/2-m.x*s,y:vh/2-m.y*s})}});
-$('#btnMenu').onclick=()=>{
-  sheet.innerHTML=`<h3>Opciones</h3>
-  <label>Mostrar categorías</label>
-  <div style="display:flex;flex-wrap:wrap;gap:8px">${Object.entries(CATS).map(([k,v])=>`<button class="chip ${cats.has(k)?'on':''}" data-k="${k}" style="${cats.has(k)?'background:'+v.c+';border-color:'+v.c:''}">${v.n}</button>`).join('')}</div>
-  <label>Imagen de mapa propia (opcional, tu captura/mapa)</label>
+$('#q').addEventListener('input',()=>{const q=$('#q').value.trim().toLowerCase();redraw();if(!q)return;
+  const m=markers.find(k=>k.name.toLowerCase().includes(q)||(k.t||'').toLowerCase()===q);
+  if(m){const s=fit*8;anim({s,x:vw/2-wx(m)*s,y:vh/2-wy(m)*s})}});
+function menu(){const found=markers.filter(m=>m.found).length;
+  sheet.innerHTML=`<h3>Opciones</h3><div class="sub">Encontrados: ${found} de ${markers.length}</div>
+  <label>Categorías visibles</label>
+  <div class="cats">${Object.entries(CATS).map(([k,v])=>`<button class="chip ${cats.has(k)?'on':''}" data-k="${k}" style="${cats.has(k)?'background:'+v.c+';border-color:'+v.c:''}">${v.n}</button>`).join('')}</div>
+  <label>Mapa propio (opcional): captura o imagen del mapa que tengas</label>
   <div class="row" style="margin-top:4px"><button id="m_img">Cargar imagen</button><button id="m_rm">Quitar</button></div>
-  <div class="row"><button id="m_exp">Exportar marcadores</button><button id="m_rst" class="dan">Restablecer</button></div>
+  <div class="row"><button id="m_exp">Exportar</button><button id="m_rst" class="dan">Restablecer todo</button></div>
+  <p>Círculo con borde discontinuo = posición estimada. Mantén pulsado en el mapa para crear un marcador. Lugares y coordenadas de referencia: comunidad gtadb.org (CC BY 4.0), reconstrucción no oficial; el dibujo del mapa es esquemático y original.</p>
   <div class="row"><button id="m_cl">Cerrar</button></div>`;
   sheet.classList.add('open');
-  sheet.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{const k=b.dataset.k;cats.has(k)?cats.delete(k):cats.add(k);$('#btnMenu').click();redraw()});
+  sheet.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{const k=b.dataset.k;cats.has(k)?cats.delete(k):cats.add(k);menu();redraw()});
   $('#m_img').onclick=()=>$('#file').click();
   $('#m_rm').onclick=()=>{setImage(null);idbSet(null);toast('Imagen quitada')};
-  $('#m_exp').onclick=()=>{const b=new Blob([JSON.stringify(markers,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='marcadores-leonida.json';a.click()};
-  $('#m_rst').onclick=()=>{if(confirm('¿Restablecer marcadores de ejemplo?')){markers=SEED.map(m=>({...m}));save();closeSheet();redraw()}};
-  $('#m_cl').onclick=closeSheet;
-};
+  $('#m_exp').onclick=()=>{const b=new Blob([JSON.stringify(st,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='mapa-leonida.json';a.click()};
+  $('#m_rst').onclick=()=>{if(confirm('¿Borrar tus marcadores y cambios?')){st={user:[],ov:{}};save();build();closeSheet();redraw()}};
+  $('#m_cl').onclick=closeSheet}
+$('#btnMenu').onclick=menu;
+
+function setImage(src){
+  if(!src){imgLayer.removeAttribute('href');hasImg=false;H=H0;imgLayer.setAttribute('height',H);bg.style.display='';zoneG.style.display='';resize();home();redraw();return}
+  const im=new Image();im.onload=()=>{H=Math.round(W*im.naturalHeight/im.naturalWidth);imgLayer.setAttribute('height',H);imgLayer.setAttribute('href',src);
+    hasImg=true;bg.style.display='none';zoneG.style.display='none';resize();home();redraw()};im.src=src}
 $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=()=>{setImage(r.result);idbSet(r.result);toast('Mapa cargado. Mueve los marcadores a su lugar.');closeSheet()};r.readAsDataURL(f)};
-
-/* IndexedDB mínima para guardar la imagen propia en el teléfono */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('leonida',1);r.onupgradeneeded=()=>r.result.createObjectStore('k');r.onsuccess=()=>res(r.result);r.onerror=rej})}
 async function idbSet(v){try{const d=await idb();const tx=d.transaction('k','readwrite');v?tx.objectStore('k').put(v,'img'):tx.objectStore('k').delete('img')}catch(e){}}
 async function idbGet(){try{const d=await idb();return await new Promise(r=>{const q=d.transaction('k').objectStore('k').get('img');q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})}catch(e){return null}}
 
-/* ===== Init ===== */
 addEventListener('resize',()=>{resize();redraw()});
 resize();view.s=fit;view.x=(vw-W*fit)/2;view.y=(vh-H*fit)/2;chips();render();
 idbGet().then(v=>{if(v)setImage(v)});
