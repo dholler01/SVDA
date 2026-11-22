@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b1620">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<title>Mapa Leonida</title>
+<style>
+:root{--bg:#0b1620;--sea:#0e2a3d;--panel:#101f2c;--ink:#e8f1f7;--mute:#8fa6b6;--acc:#ff4fa3;--line:#1d3446}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden;overscroll-behavior:none}
+#map{position:fixed;inset:0;touch-action:none;background:var(--sea);cursor:grab}
+svg{width:100%;height:100%;display:block;user-select:none;-webkit-user-select:none}
+.top{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 8px) 10px 6px;background:linear-gradient(#0b1620ee,#0b162000);z-index:5;pointer-events:none}
+.chips{display:flex;gap:6px;overflow-x:auto;pointer-events:auto;scrollbar-width:none;padding-bottom:4px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:#102233e6;color:var(--ink);padding:8px 13px;border-radius:99px;font-size:13px;font-weight:600;backdrop-filter:blur(6px)}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.fab{position:fixed;right:12px;z-index:6;display:flex;flex-direction:column;gap:8px;bottom:calc(env(safe-area-inset-bottom) + 14px)}
+.btn{width:46px;height:46px;border-radius:14px;border:1px solid var(--line);background:#102233ee;color:var(--ink);font-size:22px;display:grid;place-items:center;backdrop-filter:blur(6px)}
+.btn:active{background:var(--acc)}
+.search{position:fixed;left:10px;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:6;display:flex;gap:8px;width:calc(100% - 80px)}
+.search input{flex:1;min-width:0;height:46px;border-radius:14px;border:1px solid var(--line);background:#102233ee;color:var(--ink);padding:0 14px;font-size:16px}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--panel);border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);transform:translateY(105%);transition:transform .22s}
+.sheet.open{transform:none}
+.sheet h3{margin:0 0 10px;font-size:17px}
+.sheet label{display:block;font-size:12px;color:var(--mute);margin:10px 0 4px}
+.sheet input,.sheet select,.sheet textarea{width:100%;border-radius:10px;border:1px solid var(--line);background:#0b1620;color:var(--ink);padding:11px;font-size:16px}
+.row{display:flex;gap:8px;margin-top:14px}
+.row button{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:#16293a;color:var(--ink);font-size:15px;font-weight:600}
+.row .pri{background:var(--acc);border-color:var(--acc)}
+.row .dan{color:#ff8a8a}
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);background:#000c;padding:8px 14px;border-radius:10px;font-size:13px;z-index:20;opacity:0;transition:.2s;pointer-events:none;max-width:90%;text-align:center}
+.toast.on{opacity:1}
+.zone-label{font-weight:800;letter-spacing:.12em;text-transform:uppercase;fill:#fff;paint-order:stroke;stroke:#000a;stroke-linejoin:round;pointer-events:none}
+.mk{cursor:pointer}
+.mk text{font-weight:800;fill:#fff;text-anchor:middle;pointer-events:none}
+.mk .nm{font-weight:600;text-anchor:start;paint-order:stroke;stroke:#000c;stroke-linejoin:round}
+</style>
+</head>
+<body>
+<div id="map"><svg id="svg"></svg></div>
+
+<div class="top"><div class="chips" id="chips"></div></div>
+
+<div class="search">
+  <input id="q" type="search" placeholder="Buscar (ej. N1N)…" autocomplete="off">
+  <button class="btn" id="btnMenu" aria-label="Menú">⋯</button>
+</div>
+<div class="fab">
+  <button class="btn" id="zin" aria-label="Acercar">＋</button>
+  <button class="btn" id="zout" aria-label="Alejar">−</button>
+  <button class="btn" id="home" aria-label="Ver todo">⌂</button>
+</div>
+
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="file" accept="image/*" hidden>
+
+<script>
+'use strict';
+/* ===== Mundo (unidades de mapa 1000 x 1400) ===== */
+const W=1000,H=1400;
+/* Geografía esquemática de Leonida (inspirada en lo conocido públicamente de los tráilers).
+   Es un mapa ORIGINAL de referencia, no el arte oficial de Rockstar. */
+const LAND="M120,120 L420,70 L700,90 L860,160 L880,300 L840,460 L860,640 L820,820 L760,960 L700,1040 L600,1080 L520,1000 L470,880 L400,800 L300,760 L200,640 L150,480 L110,320 Z";
+const KEYS=[[560,1120,38,16,-20],[500,1165,30,12,-30],[430,1210,34,13,-35],[360,1250,28,11,-30],[300,1290,36,13,-40],[245,1330,26,10,-30]];
+const ZONES=[
+ {id:'kalaga',n:'Kalaga Park',c:'#4f7a4a',p:[120,120,420,70,560,90,560,250,380,260,110,320]},
+ {id:'ambrosia',n:'Ambrosia',c:'#b58a3c',p:[560,90,700,90,860,160,880,300,720,340,560,250]},
+ {id:'grass',n:'Grassrivers',c:'#3f8f7a',p:[110,320,380,260,560,250,600,420,480,560,300,640,200,640,150,480]},
+ {id:'vice',n:'Vice City',c:'#d6458f',p:[600,420,720,340,880,300,840,460,860,640,820,820,700,860,520,720,480,560]},
+ {id:'port',n:'Port Gellhorn',c:'#7a6fb5',p:[200,640,300,640,480,560,520,720,400,800,300,760]},
+ {id:'keys',n:'Leonida Keys',c:'#2fb4c9',p:[520,720,700,860,760,960,700,1040,600,1080,520,1000,470,880,400,800]}
+];
+const CATS={
+ loc:{n:'Lugar',c:'#ff4fa3'},
+ mis:{n:'Misión',c:'#f0b429'},
+ shop:{n:'Tienda',c:'#38bdf8'},
+ hide:{n:'Escondite',c:'#34d399'},
+ note:{n:'Nota',c:'#a78bfa'}
+};
+/* Marcadores de ejemplo: AJUSTA posiciones/nombres (mantén pulsado en el mapa para crear, toca uno para editar). */
+const SEED=[
+ {id:'s1',t:'N1N',name:'N1N',x:760,y:470,z:'vice',cat:'loc',note:'Punto de ejemplo: muévelo a donde corresponda.'},
+ {id:'s2',t:'VB',name:'Vice Beach',x:810,y:560,z:'vice',cat:'loc',note:''},
+ {id:'s3',t:'PG',name:'Puerto Gellhorn',x:330,y:690,z:'port',cat:'loc',note:''},
+ {id:'s4',t:'GR',name:'Pantano',x:340,y:430,z:'grass',cat:'hide',note:''},
+ {id:'s5',t:'KP',name:'Kalaga Park',x:260,y:200,z:'kalaga',cat:'loc',note:''},
+ {id:'s6',t:'AM',name:'Ambrosia',x:740,y:210,z:'ambrosia',cat:'loc',note:''},
+ {id:'s7',t:'KY',name:'Key principal',x:560,y:1120,z:'keys',cat:'loc',note:''}
+];
+
+/* ===== Estado ===== */
+const $=s=>document.querySelector(s);
+const svg=$('#svg'), mapEl=$('#map');
+const NS='http://www.w3.org/2000/svg';
+const mk=(t,a={},p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e};
+let view={x:0,y:0,s:1}, fit=1, vw=0, vh=0;
+let markers=[], filter='all', cats=new Set(Object.keys(CATS));
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+markers=store.get('mk',null)||SEED.map(m=>({...m}));
+const save=()=>store.set('mk',markers);
+
+/* ===== Escena ===== */
+const world=mk('g',{},svg);
+const bg=mk('g',{},world);
+const imgLayer=mk('image',{x:0,y:0,width:W,height:H,preserveAspectRatio:'none',opacity:1},world);
+const defs=mk('defs',{},svg);
+const pat=mk('pattern',{id:'grid',width:50,height:50,patternUnits:'userSpaceOnUse'},defs);
+mk('path',{d:'M50 0H0V50',fill:'none',stroke:'#ffffff10','stroke-width':1},pat);
+mk('rect',{x:-2000,y:-2000,width:5000,height:5400,fill:'#0e2a3d'},bg);
+mk('rect',{x:-2000,y:-2000,width:5000,height:5400,fill:'url(#grid)'},bg);
+const landG=mk('g',{},bg);
+mk('path',{d:LAND,fill:'#26443a',stroke:'#7fb5a0','stroke-width':3,'stroke-linejoin':'round'},landG);
+KEYS.forEach(k=>mk('ellipse',{cx:k[0],cy:k[1],rx:k[2],ry:k[3],transform:`rotate(${k[4]} ${k[0]} ${k[1]})`,fill:'#26443a',stroke:'#7fb5a0','stroke-width':3},landG));
+const zoneG=mk('g',{},world);
+const zoneEls={};
+ZONES.forEach(z=>{
+  const pts=[];for(let i=0;i<z.p.length;i+=2)pts.push(z.p[i]+','+z.p[i+1]);
+  const clip=mk('clipPath',{id:'c_'+z.id},defs);mk('path',{d:LAND},clip);
+  const g=mk('g',{'clip-path':z.id==='keys'?'':'url(#c_'+z.id+')'},zoneG);
+  const poly=mk('polygon',{points:pts.join(' '),fill:z.c,'fill-opacity':.35,stroke:z.c,'stroke-width':2.5,'stroke-linejoin':'round'},g);
+  zoneEls[z.id]=poly;
+  z.cx=0;z.cy=0;for(let i=0;i<z.p.length;i+=2){z.cx+=z.p[i];z.cy+=z.p[i+1]}z.cx/=z.p.length/2;z.cy/=z.p.length/2;
+  const xs=z.p.filter((_,i)=>i%2==0),ys=z.p.filter((_,i)=>i%2==1);
+  z.bb=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
+});
+const lblG=mk('g',{},svg);       /* etiquetas de zona (tamaño fijo en pantalla) */
+const mkG=mk('g',{},svg);        /* marcadores (se encogen al hacer zoom) */
+const zoneLbl={};
+ZONES.forEach(z=>{zoneLbl[z.id]=mk('text',{class:'zone-label','text-anchor':'middle'},lblG);zoneLbl[z.id].textContent=z.n});
+
+/* ===== Vista ===== */
+function resize(){vw=mapEl.clientWidth;vh=mapEl.clientHeight;fit=Math.min(vw/W,vh/H)*0.96;}
+function clampView(){
+  const minS=fit*0.8,maxS=fit*24;view.s=Math.max(minS,Math.min(maxS,view.s));
+  const m=60*view.s;
+  view.x=Math.min(m,Math.max(vw-W*view.s-m,view.x));
+  view.y=Math.min(m,Math.max(vh-H*view.s-m,view.y));
+}
+let raf=0;
+function render(){raf=0;clampView();
+  world.setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.s})`);
+  const rel=view.s/fit;
+  /* Tamaño del redondito: grande al estar alejado, se achica al acercar (como en el juego) */
+  const d=Math.max(18,Math.min(44,46/Math.pow(rel,0.62)));
+  mkG.replaceChildren();
+  const q=($('#q').value||'').trim().toLowerCase();
+  for(const m of markers){
+    if(!cats.has(m.cat))continue;
+    if(filter!=='all'&&m.z!==filter)continue;
+    const sx=view.x+m.x*view.s, sy=view.y+m.y*view.s;
+    if(sx<-60||sy<-60||sx>vw+60||sy>vh+60)continue;
+    const hit=q&&(m.name.toLowerCase().includes(q)||m.t.toLowerCase().includes(q));
+    const g=mk('g',{class:'mk',transform:`translate(${sx} ${sy})`},mkG);
+    g.dataset.id=m.id;
+    mk('circle',{r:d/2+(hit?5:0),fill:CATS[m.cat].c,stroke:hit?'#fff':'#fff','stroke-width':Math.max(1.5,d*0.07)+(hit?2:0)},g);
+    if(d>=17){const t=mk('text',{y:d*0.12,'font-size':Math.min(d*0.36,d*1.5/Math.max(m.t.length,2.2))},g);t.textContent=m.t}
+    if(rel>2.2||hit){const n=mk('text',{class:'nm',x:d/2+5,y:4,'font-size':12},g);n.textContent=m.name}
+  }
+  /* etiquetas de zona: se desvanecen al acercar mucho */
+  const zo=rel>6?0:rel>3?.5:1;
+  ZONES.forEach(z=>{const t=zoneLbl[z.id];
+    const vis=(filter==='all'||filter===z.id)&&zo>0;
+    t.style.display=vis?'':'none';
+    t.setAttribute('x',view.x+z.cx*view.s);t.setAttribute('y',view.y+z.cy*view.s);
+    t.setAttribute('font-size',Math.max(11,Math.min(22,13+rel*2)));t.setAttribute('opacity',zo);
+    t.setAttribute('stroke-width',3);
+    zoneEls[z.id].setAttribute('fill-opacity',filter==='all'?.35:(filter===z.id?.28:.08));
+  });
+}
+const redraw=()=>{raf||(raf=requestAnimationFrame(render))};
+function zoomAt(px,py,f){const ns=Math.max(fit*.8,Math.min(fit*24,view.s*f));f=ns/view.s;
+  view.x=px-(px-view.x)*f;view.y=py-(py-view.y)*f;view.s=ns;redraw()}
+function flyTo(bb,pad=0.12){
+  const bw=bb[2]-bb[0],bh=bb[3]-bb[1];
+  const s=Math.min(vw/(bw*(1+pad*2)),vh/(bh*(1+pad*2)));
+  const t={x:vw/2-((bb[0]+bb[2])/2)*s,y:vh/2-((bb[1]+bb[3])/2)*s,s};anim(t)}
+function anim(t){const a={...view},t0=performance.now();
+  (function f(n){const p=Math.min(1,(n-t0)/380),e=1-Math.pow(1-p,3);
+    view.s=a.s+(t.s-a.s)*e;view.x=a.x+(t.x-a.x)*e;view.y=a.y+(t.y-a.y)*e;render();
+    if(p<1)requestAnimationFrame(f)})(t0)}
+const home=()=>flyTo([0,0,W,H],0);
+
+/* ===== Gestos (arrastrar, pellizcar, doble toque, mantener para crear) ===== */
+const ptrs=new Map();let last=null,lp=null,moved=false,lpT=0,lastTap=0;
+mapEl.addEventListener('pointerdown',e=>{
+  mapEl.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=false;
+  if(ptrs.size===1){last={x:e.clientX,y:e.clientY};clearTimeout(lpT);
+    const mg=e.target.closest&&e.target.closest('.mk');
+    if(!mg)lpT=setTimeout(()=>{if(!moved&&ptrs.size===1){navigator.vibrate&&navigator.vibrate(20);newMarker(e.clientX,e.clientY)}},650);
+  }else{clearTimeout(lpT);lp=pinfo()}
+});
+const pinfo=()=>{const a=[...ptrs.values()];return{d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),cx:(a[0].x+a[1].x)/2,cy:(a[0].y+a[1].y)/2}};
+mapEl.addEventListener('pointermove',e=>{
+  if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1&&last){const dx=e.clientX-last.x,dy=e.clientY-last.y;
+    if(Math.abs(dx)+Math.abs(dy)>3)moved=true;if(moved)clearTimeout(lpT);
+    view.x+=dx;view.y+=dy;last={x:e.clientX,y:e.clientY};redraw()}
+  else if(ptrs.size===2&&lp){moved=true;const n=pinfo();
+    view.x+=n.cx-lp.cx;view.y+=n.cy-lp.cy;zoomAt(n.cx,n.cy,n.d/lp.d);lp=n}
+});
+const up=e=>{clearTimeout(lpT);
+  const wasTap=!moved&&ptrs.size===1;ptrs.delete(e.pointerId);
+  if(ptrs.size===1){const r=[...ptrs.values()][0];last={...r};lp=null}else last=null;
+  if(wasTap){const mg=e.target.closest&&e.target.closest('.mk');
+    if(mg){openMarker(mg.dataset.id)}
+    else{const now=Date.now();if(now-lastTap<300)zoomAt(e.clientX,e.clientY,2.2);lastTap=now;closeSheet()}}
+};
+mapEl.addEventListener('pointerup',up);mapEl.addEventListener('pointercancel',up);
+mapEl.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*0.0018))},{passive:false});
+
+/* ===== UI ===== */
+function chips(){const c=$('#chips');c.replaceChildren();
+  const add=(id,n)=>{const b=document.createElement('button');b.className='chip'+(filter===id?' on':'');b.textContent=n;
+    b.onclick=()=>{filter=id;chips();id==='all'?home():flyTo(ZONES.find(z=>z.id===id).bb);redraw()};c.appendChild(b)};
+  add('all','Todo');ZONES.forEach(z=>add(z.id,z.n));}
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2200)}
+const sheet=$('#sheet');
+function closeSheet(){sheet.classList.remove('open')}
+function zoneAt(x,y){let best=null,bd=1e9;for(const z of ZONES){const d=(z.cx-x)**2+(z.cy-y)**2;if(d<bd){bd=d;best=z.id}}return best}
+function editor(m,isNew){
+  sheet.innerHTML=`<h3>${isNew?'Nuevo marcador':'Marcador'}</h3>
+  <label>Nombre</label><input id="f_n" value="${esc(m.name)}">
+  <label>Texto del redondito (máx. 4)</label><input id="f_t" maxlength="4" value="${esc(m.t)}">
+  <label>Categoría</label><select id="f_c">${Object.entries(CATS).map(([k,v])=>`<option value="${k}" ${k===m.cat?'selected':''}>${v.n}</option>`).join('')}</select>
+  <label>Notas</label><textarea id="f_o" rows="2">${esc(m.note||'')}</textarea>
+  <div class="row"><button class="pri" id="b_ok">Guardar</button>${isNew?'<button id="b_x">Cancelar</button>':'<button id="b_mv">Mover</button><button class="dan" id="b_del">Borrar</button>'}</div>`;
+  sheet.classList.add('open');
+  $('#b_ok').onclick=()=>{m.name=$('#f_n').value.trim()||'Sin nombre';m.t=($('#f_t').value.trim()||m.name.slice(0,3)).toUpperCase();m.cat=$('#f_c').value;m.note=$('#f_o').value;
+    if(isNew)markers.push(m);save();closeSheet();redraw()};
+  if(isNew)$('#b_x').onclick=closeSheet;
+  else{$('#b_del').onclick=()=>{markers=markers.filter(k=>k!==m);save();closeSheet();redraw()};
+    $('#b_mv').onclick=()=>{closeSheet();toast('Toca el mapa para colocarlo');moving=m}}
+}
+let moving=null;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function newMarker(cx,cy){const r=mapEl.getBoundingClientRect();const x=(cx-r.left-view.x)/view.s,y=(cy-r.top-view.y)/view.s;
+  editor({id:'u'+Date.now(),t:'',name:'',x,y,z:zoneAt(x,y),cat:'loc',note:''},true)}
+function openMarker(id){const m=markers.find(k=>k.id===id);if(m)editor(m,false)}
+mapEl.addEventListener('click',e=>{ if(!moving)return;const r=mapEl.getBoundingClientRect();
+  moving.x=(e.clientX-r.left-view.x)/view.s;moving.y=(e.clientY-r.top-view.y)/view.s;moving.z=zoneAt(moving.x,moving.y);moving=null;save();redraw();toast('Movido')});
+
+$('#zin').onclick=()=>zoomAt(vw/2,vh/2,1.8);
+$('#zout').onclick=()=>zoomAt(vw/2,vh/2,1/1.8);
+$('#home').onclick=()=>{filter='all';chips();home();redraw()};
+$('#q').addEventListener('input',()=>{
+  const q=$('#q').value.trim().toLowerCase();redraw();if(!q)return;
+  const m=markers.find(k=>k.name.toLowerCase().includes(q)||k.t.toLowerCase().includes(q));
+  if(m){const s=fit*8;anim({s,x:vw/2-m.x*s,y:vh/2-m.y*s})}});
+$('#btnMenu').onclick=()=>{
+  sheet.innerHTML=`<h3>Opciones</h3>
+  <label>Mostrar categorías</label>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">${Object.entries(CATS).map(([k,v])=>`<button class="chip ${cats.has(k)?'on':''}" data-k="${k}" style="${cats.has(k)?'background:'+v.c+';border-color:'+v.c:''}">${v.n}</button>`).join('')}</div>
+  <label>Imagen de mapa propia (opcional, tu captura/mapa)</label>
+  <div class="row" style="margin-top:4px"><button id="m_img">Cargar imagen</button><button id="m_rm">Quitar</button></div>
+  <div class="row"><button id="m_exp">Exportar marcadores</button><button id="m_rst" class="dan">Restablecer</button></div>
+  <div class="row"><button id="m_cl">Cerrar</button></div>`;
+  sheet.classList.add('open');
+  sheet.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{const k=b.dataset.k;cats.has(k)?cats.delete(k):cats.add(k);$('#btnMenu').click();redraw()});
+  $('#m_img').onclick=()=>$('#file').click();
+  $('#m_rm').onclick=()=>{imgLayer.removeAttribute('href');idbSet(null);toast('Imagen quitada')};
+  $('#m_exp').onclick=()=>{const b=new Blob([JSON.stringify(markers,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='marcadores-leonida.json';a.click()};
+  $('#m_rst').onclick=()=>{if(confirm('¿Restablecer marcadores de ejemplo?')){markers=SEED.map(m=>({...m}));save();closeSheet();redraw()}};
+  $('#m_cl').onclick=closeSheet;
+};
+$('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{imgLayer.setAttribute('href',r.result);idbSet(r.result);toast('Imagen cargada. Ajusta los marcadores si hace falta.');closeSheet()};r.readAsDataURL(f)};
+
+/* IndexedDB mínima para guardar la imagen propia en el teléfono */
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('leonida',1);r.onupgradeneeded=()=>r.result.createObjectStore('k');r.onsuccess=()=>res(r.result);r.onerror=rej})}
+async function idbSet(v){try{const d=await idb();const tx=d.transaction('k','readwrite');v?tx.objectStore('k').put(v,'img'):tx.objectStore('k').delete('img')}catch(e){}}
+async function idbGet(){try{const d=await idb();return await new Promise(r=>{const q=d.transaction('k').objectStore('k').get('img');q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})}catch(e){return null}}
+
+/* ===== Init ===== */
+addEventListener('resize',()=>{resize();redraw()});
+resize();view.s=fit;view.x=(vw-W*fit)/2;view.y=(vh-H*fit)/2;chips();render();
+idbGet().then(v=>{if(v)imgLayer.setAttribute('href',v)});
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
